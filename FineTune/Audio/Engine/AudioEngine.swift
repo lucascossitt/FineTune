@@ -450,6 +450,10 @@ final class AudioEngine {
         processMonitor.activeApps
             .filter { $0.processObjectIDs.contains { $0.readProcessIsRunning() } }
     }
+    
+    var audioDevices: [AudioDevice] {
+        deviceMonitor.outputDevices
+    }
 
     // MARK: - Displayable Apps (Active + Pinned Inactive)
 
