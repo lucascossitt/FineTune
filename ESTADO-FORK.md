@@ -45,6 +45,19 @@ git log --oneline main..integration | grep "Merge branch"
 `#392` `#397` (você descartou — sobreposição semântica de canal/balanço)
 `#320` (curativo), `#386` (localização zh), `#17` (ícones antigos)
 
+## Como rebuildar
+
+```bash
+scripts/build-local.sh ~/Desktop/FineTune-teste
+```
+
+Faz build Release, reassina ad-hoc, verifica e **testa o launch de verdade**.
+Sem ele o app não abre: o projeto usa hardened runtime, e sob assinatura ad-hoc
+a library validation recusa o Sparkle.framework embutido ("different Team IDs"),
+matando o processo no dyld antes do `main()` — sem janela, sem ícone, sem aviso.
+O script também carimba a versão acima do appcast para o Sparkle não substituir
+o build por uma release pública.
+
 ## Armadilhas conhecidas
 
 1. **`xcodebuild test` escreve no `~/Library/Application Support/FineTune/settings.json` real.**
