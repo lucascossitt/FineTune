@@ -28,22 +28,31 @@ git log --oneline main..integration | grep "Merge branch"
 | #383 | Toggle para esconder o HUD mantendo as teclas de volume |
 | #217 | URL scheme para volume de device |
 
-## Pendentes de decisão
+## Correção própria (não veio de PR)
+
+**Teto no boost do loudness compensation.** A curva ISO 226 é ilimitada: medida
+nesta branch, pede +14,35 dB de grave a 25% de volume e +22,49 dB a 5%. A
+compensação roda depois do ganho de volume e logo antes do `SoftLimiter`
+(threshold 0,95, headroom 0,05, resposta assintótica), então o sinal entrava
+vários dB além do joelho e a saída grudava no teto — distorção larga, não o
+realce de grave pretendido.
+
+`compensationGains` já tinha o parâmetro `maxGainDB` para isso; o chamador
+passava `.greatestFiniteMagnitude`. Agora passa 6 dB. A curva segue normalizada
+em 1 kHz, então o teto limita o boost sem mexer nos médios.
+
+## Decidido: fora
 
 - **#388** (sons curtos cortados): muda o contrato de `advanceOutputGate` sem
-  atualizar os testes. 6 testes precisam de ajuste mecânico, 4 afirmam o
-  comportamento que ele deleta de propósito (re-arm por silêncio).
-- **#303** (preamp anti-clipping no loudness): corte incondicional igual ao
-  inverso do pico de boost — por construção a compensação nunca adiciona
-  energia. Quebra `loudnessCompensatorModifiesOutput`, que codifica o
-  propósito do recurso. Empurra na direção da issue #278.
-- **#401** (grupos de apps, +1951): Fase B. Conflito mecânico em
-  `URLHandler.swift` — unificar alvos `app`/`device`/`group` no parser.
-
-## Descartados
-
-`#392` `#397` (você descartou — sobreposição semântica de canal/balanço)
-`#320` (curativo), `#386` (localização zh), `#17` (ícones antigos)
+  atualizar os testes — 4 deles afirmam a proteção contra crackle na retomada
+  que o PR deleta. Ganho pequeno, risco não validável sem teste de sleep/resume.
+- **#303** (preamp anti-clipping): superado pela correção acima. Ele atenua pelo
+  pico inteiro do boost; como a curva é normalizada em 1 kHz, isso devolveria o
+  grave à unidade e derrubaria os médios ~14 dB a 25% de volume — trocaria um
+  artefato por outro pior.
+- **#401** (grupos de apps, +1951): descartado. Fase B encerrada.
+- **#392** **#397**: sobreposição semântica entre canal mono e balanço L/R.
+- **#320** (curativo), **#386** (localização zh), **#17** (ícones antigos).
 
 ## Como rebuildar
 
