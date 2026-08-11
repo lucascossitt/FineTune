@@ -266,7 +266,8 @@ final class MediaKeyMonitor {
         getVolume: ((AudioDeviceID) -> Float)? = nil,
         playFeedback: (Float) -> Void = { _ in }
     ) {
-        let shouldShowHUD = !popupVisibility.isVisible
+        let shouldShowHUD = settingsManager.appSettings.volumeHUDEnabled
+            && !popupVisibility.isVisible
         let sliderDelta = settingsManager.appSettings.volumeHotkeyStep.sliderDelta
         let currentSlider = VolumeMapping.sliderFraction(forSystemGain: currentVolume, tier: tier)
 
