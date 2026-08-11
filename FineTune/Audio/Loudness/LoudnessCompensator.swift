@@ -16,6 +16,20 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     // MARK: - Configuration
 
+    /// Ceiling on how much the loudness target may boost any single frequency.
+    ///
+    /// The raw ISO 226 target is unbounded: it asks for +14 dB of bass at 25% volume
+    /// and over +22 dB at 5%. Compensation runs after the volume gain and immediately
+    /// before `SoftLimiter`, whose threshold is 0.95 with only 0.05 of headroom, so an
+    /// unbounded target drives the limiter several times past its knee. Its asymptotic
+    /// curve then pins the output at the ceiling — audible as broadband distortion and
+    /// pumping, not as the intended bass lift.
+    ///
+    /// Capping the target keeps the boost audible while leaving the limiter idle on
+    /// normal material. This bounds the boost only; the curve stays normalized at
+    /// 1 kHz, so midrange is untouched and the tonal intent is preserved.
+    static let maxCompensationBoostDB: Double = 6.0
+
     /// Four-section topology chosen to approximate the ISO-derived loudness target with
     /// minimal runtime DSP cost: low shelf, low-mid bell, upper-mid bell, high shelf.
     private enum LoudnessFilterKind {
@@ -203,7 +217,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     }
 
     private static func targetCurveDB(forPhon phon: Double) -> [Double] {
-        let compensation = ISO226Contours.compensationGains(atPhon: phon)
+        let compensation = ISO226Contours.compensationGains(
+            atPhon: phon,
+            maxGainDB: maxCompensationBoostDB
+        )
         let fitFrequencies = fitGridFrequencies()
         return fitFrequencies.map { frequency in
             ISO226Contours.interpolateCompensation(compensation, atFrequency: frequency)

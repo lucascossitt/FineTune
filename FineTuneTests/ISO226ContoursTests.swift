@@ -168,7 +168,12 @@ struct LoudnessCompensatorHeadroomTests {
     func fittedCascadeTracksTargetAtThreePercentVolume() {
         let sampleRate = 48_000.0
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.03)
-        let targetGains = ISO226Contours.compensationGains(atPhon: phon)
+        // Must use the same ceiling the fitter applies, otherwise this measures the gap
+        // between two different targets instead of the quality of the fit.
+        let targetGains = ISO226Contours.compensationGains(
+            atPhon: phon,
+            maxGainDB: LoudnessCompensator.maxCompensationBoostDB
+        )
         let fittedGains = LoudnessCompensator.fittedSectionGains(forPhon: phon, sampleRate: sampleRate)
         let coefficients = LoudnessCompensator.coefficientsForBands(gains: fittedGains, sampleRate: sampleRate)
 
