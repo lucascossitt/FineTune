@@ -19,7 +19,7 @@ struct LoudnessBoostCeilingTests {
 
     @Test("Target curve never asks for more boost than the ceiling, at any volume")
     func targetCurveRespectsCeiling() {
-        let ceiling = LoudnessCompensator.maxCompensationBoostDB
+        let ceiling = LoudnessCompensator.defaultMaxBoostDB
 
         for volume in Self.volumes {
             let phon = ISO226Contours.estimatedPhon(fromSystemVolume: volume)
@@ -53,7 +53,7 @@ struct LoudnessBoostCeilingTests {
             let gains = LoudnessCompensator.fittedSectionGains(forPhon: phon, sampleRate: Self.sampleRate)
             let peakSection = gains.max() ?? 0
 
-            #expect(Double(peakSection) <= LoudnessCompensator.maxCompensationBoostDB + 2.0,
+            #expect(Double(peakSection) <= LoudnessCompensator.defaultMaxBoostDB + 2.0,
                     "volume \(volume): realized section gain \(peakSection) dB overshoots the ceiling")
         }
     }
@@ -65,7 +65,7 @@ struct LoudnessBoostCeilingTests {
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.25)
         let gains = ISO226Contours.compensationGains(
             atPhon: phon,
-            maxGainDB: LoudnessCompensator.maxCompensationBoostDB
+            maxGainDB: LoudnessCompensator.defaultMaxBoostDB
         )
         let oneKilohertzIndex = ISO226Contours.frequencies.firstIndex(of: 1000)
         let atOneKilohertz = try! #require(oneKilohertzIndex.map { gains[$0] })
@@ -74,13 +74,76 @@ struct LoudnessBoostCeilingTests {
                 "1 kHz should be unity, got \(atOneKilohertz) dB")
     }
 
+    @Test("A higher ceiling really does produce more boost", arguments: [(3.0, 9.0), (6.0, 12.0), (9.0, 18.0)])
+    func raisingCeilingRaisesBoost(low: Double, high: Double) {
+        let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.25)
+
+        let quiet = LoudnessCompensator.fittedSectionGains(
+            forPhon: phon, sampleRate: Self.sampleRate, maxBoostDB: low
+        ).max() ?? 0
+        let loud = LoudnessCompensator.fittedSectionGains(
+            forPhon: phon, sampleRate: Self.sampleRate, maxBoostDB: high
+        ).max() ?? 0
+
+        #expect(loud > quiet,
+                "ceiling \(high) dB should boost more than \(low) dB, got \(loud) vs \(quiet)")
+    }
+
+    @Test("Ceiling is clamped to the offered range, and garbage falls back to the default")
+    func ceilingIsClamped() {
+        let range = LoudnessCompensator.maxBoostRangeDB
+
+        #expect(LoudnessCompensator.clampMaxBoostDB(-5) == range.lowerBound)
+        #expect(LoudnessCompensator.clampMaxBoostDB(999) == range.upperBound)
+        #expect(LoudnessCompensator.clampMaxBoostDB(7.5) == 7.5)
+        #expect(LoudnessCompensator.clampMaxBoostDB(.nan) == LoudnessCompensator.defaultMaxBoostDB)
+        #expect(LoudnessCompensator.clampMaxBoostDB(.infinity) == range.upperBound)
+    }
+
+    @Test("Zero ceiling flattens the curve entirely")
+    func zeroCeilingIsFlat() {
+        // The slider bottoms out at 0, which must mean "no compensation" rather than
+        // some undefined state.
+        let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.10)
+        let gains = ISO226Contours.compensationGains(atPhon: phon, maxGainDB: 0.0)
+
+        #expect(gains.allSatisfy { $0 <= 0.001 },
+                "a 0 dB ceiling should leave no positive boost, got peak \(gains.max() ?? 0)")
+    }
+
+    @Test("Setting persists across an encode/decode round trip")
+    func settingRoundTrips() throws {
+        var settings = AppSettings()
+        settings.loudnessMaxBoostDB = 11.5
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.loudnessMaxBoostDB == 11.5)
+    }
+
+    @Test("Settings files written before this setting existed fall back to the default")
+    func missingKeyFallsBackToDefault() throws {
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+
+        #expect(decoded.loudnessMaxBoostDB == LoudnessCompensator.defaultMaxBoostDB)
+    }
+
+    @Test("An out-of-range value on disk is clamped rather than trusted")
+    func outOfRangeStoredValueIsClamped() throws {
+        let json = Data(#"{"loudnessMaxBoostDB": 500}"#.utf8)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
+
+        #expect(decoded.loudnessMaxBoostDB == LoudnessCompensator.maxBoostRangeDB.upperBound)
+    }
+
     @Test("Compensation still does something audible at low volume")
     func compensationRemainsAudible() {
         // A ceiling that is too aggressive would silently disable the feature.
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: 0.25)
         let gains = ISO226Contours.compensationGains(
             atPhon: phon,
-            maxGainDB: LoudnessCompensator.maxCompensationBoostDB
+            maxGainDB: LoudnessCompensator.defaultMaxBoostDB
         )
         let peak = gains.max() ?? 0
 

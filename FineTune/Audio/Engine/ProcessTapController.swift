@@ -128,6 +128,10 @@ final class ProcessTapController: ProcessTapControlling {
     /// Last effective loudness volume (device × app) passed to updateLoudnessCompensation.
     /// Used by createSecondaryTap to initialize secondary compensator with the correct volume.
     private var _lastLoudnessVolume: Float = 1.0
+    /// Last boost ceiling applied. Same purpose as `_lastLoudnessVolume`: a tap created
+    /// mid-session (crossfade secondary, device switch) must inherit the user's setting
+    /// rather than reverting to the default.
+    private var _lastLoudnessMaxBoostDB: Double = LoudnessCompensator.defaultMaxBoostDB
     /// Independent EQ processors for secondary tap during crossfade.
     /// Each tap needs its own biquad delay buffers — sharing would corrupt filter state
     /// because both callbacks write concurrently from different HAL I/O threads.
@@ -274,6 +278,12 @@ final class ProcessTapController: ProcessTapControlling {
             loudnessCompensator?.setEnabled(false)
             secondaryLoudnessCompensator?.setEnabled(false)
         }
+    }
+
+    func setLoudnessMaxBoostDB(_ dB: Double) {
+        _lastLoudnessMaxBoostDB = dB
+        loudnessCompensator?.setMaxBoostDB(dB)
+        secondaryLoudnessCompensator?.setMaxBoostDB(dB)
     }
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
@@ -684,6 +694,10 @@ final class ProcessTapController: ProcessTapControlling {
         if let profile = initial.autoEQProfile {
             autoEQProcessor?.updateProfile(profile)
         }
+        // Ceiling first: updateForVolume computes coefficients, so setting it after
+        // would leave the first IOProc callback running the default curve.
+        _lastLoudnessMaxBoostDB = initial.loudnessMaxBoostDB
+        loudnessCompensator?.setMaxBoostDB(initial.loudnessMaxBoostDB)
         loudnessCompensator?.setEnabled(initial.loudnessCompensationEnabled)
         if initial.loudnessCompensationEnabled {
             loudnessCompensator?.updateForVolume(initial.loudnessVolume)
@@ -1063,6 +1077,7 @@ final class ProcessTapController: ProcessTapControlling {
         secondaryLoudnessEqualizerProcessor = secLoudnessEqualizer
 
         let secLoudness = LoudnessCompensator(sampleRate: sampleRate)
+        secLoudness.setMaxBoostDB(_lastLoudnessMaxBoostDB)
         secLoudness.updateForVolume(_lastLoudnessVolume)
         if !(loudnessCompensator?.isEnabled ?? false) { secLoudness.setEnabled(false) }
         secondaryLoudnessCompensator = secLoudness

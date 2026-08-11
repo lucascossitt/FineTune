@@ -8,5 +8,6 @@ struct TapInitialState {
     var autoEQPreampEnabled: Bool = false
     var loudnessVolume: Float = 1.0
     var loudnessCompensationEnabled: Bool = false
+    var loudnessMaxBoostDB: Double = LoudnessCompensator.defaultMaxBoostDB
     var loudnessEqualizerSettings: LoudnessEqualizerSettings = .init()
 }

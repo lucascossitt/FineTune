@@ -22,6 +22,7 @@ final class RecordingProcessTapController: ProcessTapControlling {
         case setAutoEQPreampEnabled(Bool)
         case updateLoudnessCompensation(volume: Float, enabled: Bool)
         case updateLoudnessEqualization(LoudnessEqualizerSettings)
+        case setLoudnessMaxBoostDB(Double)
         case invalidate
     }
 
@@ -90,6 +91,10 @@ final class RecordingProcessTapController: ProcessTapControlling {
 
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings) {
         events.append(.updateLoudnessEqualization(settings))
+    }
+
+    func setLoudnessMaxBoostDB(_ dB: Double) {
+        events.append(.setLoudnessMaxBoostDB(dB))
     }
 
     func switchDevice(to newDeviceUID: String, preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool, autoEQProfile: AutoEQProfile?) async throws {
@@ -402,7 +407,8 @@ struct AudioEngineTapInitialStateTests {
         for event in tap.events.prefix(activateIndex) {
             switch event {
             case .updateEQSettings, .updateAutoEQProfile, .setAutoEQPreampEnabled,
-                 .updateLoudnessCompensation, .updateLoudnessEqualization:
+                 .updateLoudnessCompensation, .updateLoudnessEqualization,
+                 .setLoudnessMaxBoostDB:
                 Issue.record("Pre-activate mutation breaks the apply-initial-state contract: \(event)")
             case .activate, .invalidate:
                 break

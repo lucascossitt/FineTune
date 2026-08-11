@@ -43,6 +43,12 @@ nonisolated struct AppSettings: Codable, Equatable {
     var loudnessCompensationEnabled: Bool = false  // ISO 226:2023 equal-loudness contour compensation
     var loudnessEqualizationEnabled: Bool = false  // Real-time loudness equalization
 
+    // Ceiling on the loudness boost, in dB. The raw ISO 226 target is unbounded
+    // (over +22 dB at very low volume), which drives SoftLimiter past its knee and
+    // turns the bass lift into broadband distortion. Tunable because the usable
+    // headroom depends on the output device and on how hot the source material is.
+    var loudnessMaxBoostDB: Double = LoudnessCompensator.defaultMaxBoostDB
+
     // Monitor (DDC/CI) volume control
     // When enabled, FineTune probes external displays over I2C (DDC/CI) so monitor
     // speakers appear as volume-controllable outputs. Probing writes to the display's
@@ -84,6 +90,8 @@ nonisolated struct AppSettings: Codable, Equatable {
         showDeviceDisconnectAlerts = try c.decodeIfPresent(Bool.self, forKey: .showDeviceDisconnectAlerts) ?? true
         loudnessCompensationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessCompensationEnabled) ?? false
         loudnessEqualizationEnabled = try c.decodeIfPresent(Bool.self, forKey: .loudnessEqualizationEnabled) ?? false
+        loudnessMaxBoostDB = (try c.decodeIfPresent(Double.self, forKey: .loudnessMaxBoostDB))
+            .map { LoudnessCompensator.clampMaxBoostDB($0) } ?? LoudnessCompensator.defaultMaxBoostDB
         ddcVolumeControlEnabled = try c.decodeIfPresent(Bool.self, forKey: .ddcVolumeControlEnabled) ?? true
         hudStyle = try c.decodeIfPresent(HUDStyle.self, forKey: .hudStyle) ?? .tahoe
         volumeHUDEnabled = try c.decodeIfPresent(Bool.self, forKey: .volumeHUDEnabled) ?? true

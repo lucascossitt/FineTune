@@ -23,6 +23,7 @@ protocol ProcessTapControlling: AnyObject, Sendable {
     func updateAutoEQProfile(_ profile: AutoEQProfile?)
     func setAutoEQPreampEnabled(_ enabled: Bool)
     func updateLoudnessCompensation(volume: Float, enabled: Bool)
+    func setLoudnessMaxBoostDB(_ dB: Double)
     func updateLoudnessEqualization(_ settings: LoudnessEqualizerSettings)
     func switchDevice(to newDeviceUID: String, preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool, autoEQProfile: AutoEQProfile?) async throws
     func updateDevices(to newDeviceUIDs: [String], preferredTapSourceDeviceUID: String?, sourceDeviceDead: Bool, autoEQProfile: AutoEQProfile?) async throws

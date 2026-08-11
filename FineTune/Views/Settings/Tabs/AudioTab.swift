@@ -77,7 +77,39 @@ struct AudioTab: View {
                     .controlSize(.small)
                     .labelsHidden()
             }
+            if settings.appSettings.loudnessCompensationEnabled {
+                SettingsRowDivider()
+                SettingsRow(
+                    "Maximum Boost",
+                    description: "How much bass lift loudness compensation may apply. Raise it for more bass; back off if the sound distorts."
+                ) {
+                    HStack(spacing: 10) {
+                        Slider(
+                            value: loudnessMaxBoostBinding,
+                            in: LoudnessCompensator.maxBoostRangeDB,
+                            step: 0.5
+                        )
+                        .controlSize(.small)
+                        .frame(width: 220)
+
+                        Text("\(settings.appSettings.loudnessMaxBoostDB, specifier: "%.1f") dB")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, alignment: .trailing)
+                    }
+                }
+            }
         }
+    }
+
+    /// Writes through the engine rather than straight to settings: live taps hold their
+    /// own compensator instances and must be told to rebuild coefficients, otherwise the
+    /// slider only takes effect on the next tap creation.
+    private var loudnessMaxBoostBinding: Binding<Double> {
+        Binding(
+            get: { settings.appSettings.loudnessMaxBoostDB },
+            set: { audioEngine.setLoudnessMaxBoostDB($0) }
+        )
     }
 
     // MARK: - Devices

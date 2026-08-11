@@ -850,6 +850,14 @@ final class AudioEngine {
         }
     }
 
+    func setLoudnessMaxBoostDB(_ dB: Double) {
+        let clamped = LoudnessCompensator.clampMaxBoostDB(dB)
+        settingsManager.appSettings.loudnessMaxBoostDB = clamped
+        for tap in taps.values {
+            tap.setLoudnessMaxBoostDB(clamped)
+        }
+    }
+
     func setLoudnessEqualizationEnabled(_ enabled: Bool) {
         var settings = LoudnessEqualizerSettings()
         settings.enabled = enabled
@@ -896,6 +904,7 @@ final class AudioEngine {
             autoEQPreampEnabled: settingsManager.autoEQPreampEnabled,
             loudnessVolume: deviceVolume * volumeState.getVolume(for: app.id),
             loudnessCompensationEnabled: settingsManager.appSettings.loudnessCompensationEnabled,
+            loudnessMaxBoostDB: settingsManager.appSettings.loudnessMaxBoostDB,
             loudnessEqualizerSettings: loudnessEqSettings
         )
     }

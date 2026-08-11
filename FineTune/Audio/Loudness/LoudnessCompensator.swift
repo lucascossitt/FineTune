@@ -28,7 +28,26 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     /// Capping the target keeps the boost audible while leaving the limiter idle on
     /// normal material. This bounds the boost only; the curve stays normalized at
     /// 1 kHz, so midrange is untouched and the tonal intent is preserved.
-    static let maxCompensationBoostDB: Double = 6.0
+    ///
+    /// Conservative by design: how much headroom is actually available depends on the
+    /// output device and on how hot the source material is, so this is the starting
+    /// point, not a limit. Users can raise it from Settings → Audio.
+    static let defaultMaxBoostDB: Double = 6.0
+
+    /// Range offered in the UI. The upper bound is where the raw ISO target tops out
+    /// at very low volume; past it the setting would stop having any effect.
+    static let maxBoostRangeDB: ClosedRange<Double> = 0.0...24.0
+
+    static func clampMaxBoostDB(_ value: Double) -> Double {
+        // NaN is unordered, so min/max would silently propagate it into the filter
+        // coefficients. Infinities are ordered and clamp normally.
+        guard !value.isNaN else { return defaultMaxBoostDB }
+        return min(max(value, maxBoostRangeDB.lowerBound), maxBoostRangeDB.upperBound)
+    }
+
+    /// Active ceiling for this instance. Written from the settings path, read when
+    /// coefficients are recomputed — never from the render callback.
+    private var _maxBoostDB: Double = defaultMaxBoostDB
 
     /// Four-section topology chosen to approximate the ISO-derived loudness target with
     /// minimal runtime DSP cost: low shelf, low-mid bell, upper-mid bell, high shelf.
@@ -83,6 +102,18 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
     ///   which the RT audio callback reads via `nonisolated(unsafe)`. Calling from any other
     ///   thread creates a data race. Not annotated `@MainActor` because `BiquadProcessor`
     ///   is not actor-isolated and test call sites run on arbitrary Swift Testing threads.
+    /// Update the boost ceiling and rebuild coefficients at the current phon.
+    ///
+    /// Bypasses the phon-delta coalescing in `updateForVolume`: the volume has not
+    /// changed, so that guard would drop the update and the slider would appear dead
+    /// until the user also moved the volume.
+    func setMaxBoostDB(_ dB: Double) {
+        let clamped = Self.clampMaxBoostDB(dB)
+        guard clamped != _maxBoostDB else { return }
+        _maxBoostDB = clamped
+        rebuildCoefficients(phon: _currentPhon)
+    }
+
     func updateForVolume(_ systemVolume: Float) {
         let phon = ISO226Contours.estimatedPhon(fromSystemVolume: systemVolume)
 
@@ -91,6 +122,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         guard !isEnabled || abs(phon - _currentPhon) >= 1.0 else { return }
         _currentPhon = phon
 
+        rebuildCoefficients(phon: phon)
+    }
+
+    private func rebuildCoefficients(phon: Double) {
         let gains = computeBandGains(phon: phon)
 
         // Bypass when all gains are negligible (near reference level)
@@ -113,12 +148,16 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
 
     /// Compute per-section gains (dB) for the fixed four-filter loudness topology.
     private func computeBandGains(phon: Double) -> [Float] {
-        Self.fittedSectionGains(forPhon: phon, sampleRate: sampleRate)
+        Self.fittedSectionGains(forPhon: phon, sampleRate: sampleRate, maxBoostDB: _maxBoostDB)
     }
 
     /// Fit the fixed four-section loudness topology to the ISO-derived target curve.
-    static func fittedSectionGains(forPhon phon: Double, sampleRate: Double) -> [Float] {
-        let targetCurve = targetCurveDB(forPhon: phon)
+    static func fittedSectionGains(
+        forPhon phon: Double,
+        sampleRate: Double,
+        maxBoostDB: Double = defaultMaxBoostDB
+    ) -> [Float] {
+        let targetCurve = targetCurveDB(forPhon: phon, maxBoostDB: maxBoostDB)
         let basisResponses = basisResponsesDB(sampleRate: sampleRate)
         let gramMatrix = gramMatrix(for: basisResponses)
 
@@ -216,10 +255,10 @@ final class LoudnessCompensator: BiquadProcessor, @unchecked Sendable {
         return magnitude
     }
 
-    private static func targetCurveDB(forPhon phon: Double) -> [Double] {
+    private static func targetCurveDB(forPhon phon: Double, maxBoostDB: Double) -> [Double] {
         let compensation = ISO226Contours.compensationGains(
             atPhon: phon,
-            maxGainDB: maxCompensationBoostDB
+            maxGainDB: maxBoostDB
         )
         let fitFrequencies = fitGridFrequencies()
         return fitFrequencies.map { frequency in
